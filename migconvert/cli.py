@@ -41,10 +41,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _statement_count(sql: str) -> int:
-    return len([s for s in sql.split(";") if s.strip()])
-
-
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -79,8 +75,8 @@ def main(argv: list[str] | None = None) -> int:
                     "from_format": from_format,
                     "to_format": args.to_format,
                     "output_file": str(args.output) if args.output else None,
-                    "up_statement_count": _statement_count(migration.up),
-                    "down_statement_count": _statement_count(migration.down),
+                    "up_statement_count": formats.count_statements(migration.up),
+                    "down_statement_count": formats.count_statements(migration.down),
                     "output": None if args.output else output,
                 }
             )

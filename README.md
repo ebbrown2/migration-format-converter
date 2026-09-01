@@ -64,9 +64,11 @@ exit code is 1.
 
 ## Status
 
-Early skeleton. Handles the common case (one up block, one down block,
-no nested `$$`-quoted function bodies). See the tracker in this repo for
-what's not handled yet.
+Early skeleton. Handles the common case (one up block, one down block).
+The `--json` statement counts account for `$$`- and `$tag$`-quoted
+function bodies, so a semicolon inside a `CREATE FUNCTION` body doesn't
+get counted as a statement separator. Directory-mode conversion and a
+golang-migrate (`.up.sql`/`.down.sql`) format are not implemented yet.
 
 ## License
 
