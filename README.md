@@ -46,6 +46,26 @@ $ python -m migconvert 0001_create_users.sql --to dbmate -o db/migrations/202608
 wrote db/migrations/20260827120000_create_users.sql (goose -> dbmate)
 ```
 
+## Directory mode
+
+Pass a directory as the input to convert every `.sql` file in it. `-o` is
+required in this case and names the directory converted files are written
+into (it's created if it doesn't exist); each file keeps its original name.
+Source format is auto-detected per file unless `--from` is given, in which
+case it's applied to every file in the directory.
+
+```
+$ python -m migconvert db/goose_migrations --to dbmate -o db/migrations
+wrote db/migrations/0001_create_users.sql (goose -> dbmate)
+wrote db/migrations/0002_add_index.sql (goose -> dbmate)
+```
+
+A file that fails to parse is reported and does not stop the rest of the
+batch; the command exits 1 if any file failed. With `--json`, the result
+is `{"ok": bool, "results": [...]}` where each entry has the same shape as
+the single-file JSON output (or `{"ok": false, "input": ..., "error": ...}`
+for a failed file).
+
 ## JSON output
 
 Every command supports `--json` for scripting against, which reports the
@@ -67,8 +87,9 @@ exit code is 1.
 Early skeleton. Handles the common case (one up block, one down block).
 The `--json` statement counts account for `$$`- and `$tag$`-quoted
 function bodies, so a semicolon inside a `CREATE FUNCTION` body doesn't
-get counted as a statement separator. Directory-mode conversion and a
-golang-migrate (`.up.sql`/`.down.sql`) format are not implemented yet.
+get counted as a statement separator. A golang-migrate
+(`.up.sql`/`.down.sql`) format and automated tests are not implemented
+yet.
 
 ## License
 
