@@ -82,14 +82,26 @@ SQL went to the file, not stdout) and `"output_file"` names where it was
 written. On failure the JSON is `{"ok": false, "error": "..."}` and the
 exit code is 1.
 
+## Tests
+
+```
+$ python -m unittest discover -s tests
+```
+
+No third-party test runner required; the suite uses `unittest` from the
+standard library and covers goose/dbmate round-trip conversion, malformed
+input, and the statement counter's handling of `$$`-quoted bodies,
+string literals, and comments.
+
 ## Status
 
 Early skeleton. Handles the common case (one up block, one down block).
 The `--json` statement counts account for `$$`- and `$tag$`-quoted
 function bodies, so a semicolon inside a `CREATE FUNCTION` body doesn't
 get counted as a statement separator. A golang-migrate
-(`.up.sql`/`.down.sql`) format and automated tests are not implemented
-yet.
+(`.up.sql`/`.down.sql`) format is not implemented yet — it splits up/down
+across two files instead of using markers in one, which doesn't fit the
+current parse/render interface and needs its own code path.
 
 ## License
 
