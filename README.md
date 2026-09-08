@@ -1,15 +1,18 @@
 # migconvert
 
-Converts a single SQL migration file between two annotation styles:
+Converts SQL migration files between three tools' conventions:
 
 - **goose**: `-- +goose Up` / `-- +goose Down` (optionally wrapped in
-  `-- +goose StatementBegin` / `-- +goose StatementEnd`)
-- **dbmate**: `-- migrate:up` / `-- migrate:down`
+  `-- +goose StatementBegin` / `-- +goose StatementEnd`), one `.sql` file
+- **dbmate**: `-- migrate:up` / `-- migrate:down`, one `.sql` file
+- **golang-migrate**: no markers; up and down live in separate
+  `<name>.up.sql` / `<name>.down.sql` files
 
-Both tools store an "up" and a "down" block in one `.sql` file; they just
-disagree on the marker comments. If you're moving a project from one
-migration tool to the other, you end up hand-editing every file in your
-migrations directory. This does that mechanically.
+goose and dbmate store an "up" and a "down" block in one file and just
+disagree on the marker comments; golang-migrate splits them across two
+files instead. If you're moving a project from one migration tool to
+another, you end up hand-editing every file in your migrations directory.
+This does that mechanically.
 
 ## Usage
 
@@ -66,6 +69,40 @@ is `{"ok": bool, "results": [...]}` where each entry has the same shape as
 the single-file JSON output (or `{"ok": false, "input": ..., "error": ...}`
 for a failed file).
 
+### golang-migrate
+
+golang-migrate has no marker comments, so it only works in directory mode,
+where each migration is a `<name>.up.sql` / `<name>.down.sql` pair rather
+than a single file:
+
+```
+$ ls db/goose_migrations
+0001_create_users.sql
+$ python -m migconvert db/goose_migrations --to golang-migrate -o db/migrations
+wrote db/migrations/0001_create_users.up.sql and db/migrations/0001_create_users.down.sql (goose -> golang-migrate)
+```
+
+Converting the other direction requires `--from golang-migrate` explicitly
+(the source format can't be auto-detected from file contents the way the
+marker-based formats can):
+
+```
+$ ls db/migrations
+0001_create_users.up.sql
+0001_create_users.down.sql
+$ python -m migconvert db/migrations --from golang-migrate --to dbmate -o db/dbmate_migrations
+wrote db/dbmate_migrations/0001_create_users.sql (golang-migrate -> dbmate)
+```
+
+A pair missing one half (an `.up.sql` with no matching `.down.sql`, or vice
+versa) is reported as an error for that migration and doesn't stop the rest
+of the batch, same as a malformed file in the marker-based formats.
+
+In the JSON output, a result whose target is golang-migrate has
+`"output_file": null` and `"output_files": [...]` (a two-element list)
+instead; every other result keeps `"output_file"` and has
+`"output_files": null`.
+
 ## JSON output
 
 Every command supports `--json` for scripting against, which reports the
@@ -98,10 +135,8 @@ string literals, and comments.
 Early skeleton. Handles the common case (one up block, one down block).
 The `--json` statement counts account for `$$`- and `$tag$`-quoted
 function bodies, so a semicolon inside a `CREATE FUNCTION` body doesn't
-get counted as a statement separator. A golang-migrate
-(`.up.sql`/`.down.sql`) format is not implemented yet — it splits up/down
-across two files instead of using markers in one, which doesn't fit the
-current parse/render interface and needs its own code path.
+get counted as a statement separator. There's no `--check` mode yet to
+validate a file without converting it.
 
 ## License
 

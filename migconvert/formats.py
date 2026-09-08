@@ -172,3 +172,26 @@ def detect_format(text: str) -> str | None:
     if "-- migrate:up" in text:
         return "dbmate"
     return None
+
+
+def parse_golang_migrate(up_text: str, down_text: str) -> Migration:
+    """Build a Migration from the contents of a golang-migrate up/down pair.
+
+    golang-migrate has no marker comments to parse around; the up and down
+    halves are already split, one per file, so this just normalizes the
+    surrounding blank lines to match what parse_goose/parse_dbmate produce.
+    """
+    return Migration(up=up_text.strip("\n"), down=down_text.strip("\n"))
+
+
+def render_golang_migrate(migration: Migration) -> tuple[str, str]:
+    """Render a Migration to the (up, down) contents of a golang-migrate pair.
+
+    Returns two strings rather than one, so it can't live in FORMATS
+    alongside the marker-based formats, which render a single file.
+    """
+
+    def render_half(text: str) -> str:
+        return text + "\n" if text else ""
+
+    return render_half(migration.up), render_half(migration.down)

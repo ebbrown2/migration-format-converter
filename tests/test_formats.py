@@ -2,11 +2,14 @@ import unittest
 
 from migconvert.formats import (
     FormatError,
+    Migration,
     count_statements,
     detect_format,
     parse_dbmate,
+    parse_golang_migrate,
     parse_goose,
     render_dbmate,
+    render_golang_migrate,
     render_goose,
 )
 
@@ -54,6 +57,48 @@ class RoundTripTests(unittest.TestCase):
         self.assertNotIn("StatementEnd", migration.up)
         dbmate_text = render_dbmate(migration)
         self.assertEqual(parse_dbmate(dbmate_text).up, migration.up)
+
+
+class GolangMigrateTests(unittest.TestCase):
+    def test_parse_strips_surrounding_blank_lines(self):
+        migration = parse_golang_migrate(
+            "\nCREATE TABLE users (id INTEGER PRIMARY KEY);\n\n",
+            "\n\nDROP TABLE users;\n",
+        )
+        self.assertEqual(migration.up, "CREATE TABLE users (id INTEGER PRIMARY KEY);")
+        self.assertEqual(migration.down, "DROP TABLE users;")
+
+    def test_render_produces_single_trailing_newline_per_file(self):
+        migration = Migration(
+            up="CREATE TABLE users (id INTEGER PRIMARY KEY);",
+            down="DROP TABLE users;",
+        )
+        up_text, down_text = render_golang_migrate(migration)
+        self.assertEqual(up_text, "CREATE TABLE users (id INTEGER PRIMARY KEY);\n")
+        self.assertEqual(down_text, "DROP TABLE users;\n")
+
+    def test_render_empty_half_is_empty_file(self):
+        up_text, down_text = render_golang_migrate(Migration(up="SELECT 1;", down=""))
+        self.assertEqual(down_text, "")
+
+    def test_round_trips_through_goose(self):
+        migration = parse_golang_migrate(
+            "CREATE TABLE users (id INTEGER PRIMARY KEY);\n", "DROP TABLE users;\n"
+        )
+        goose_text = render_goose(migration)
+        self.assertEqual(parse_goose(goose_text), migration)
+
+    def test_round_trips_from_dbmate(self):
+        dbmate_text = (
+            "-- migrate:up\n"
+            "CREATE TABLE users (id INTEGER PRIMARY KEY);\n"
+            "\n"
+            "-- migrate:down\n"
+            "DROP TABLE users;\n"
+        )
+        migration = parse_dbmate(dbmate_text)
+        up_text, down_text = render_golang_migrate(migration)
+        self.assertEqual(parse_golang_migrate(up_text, down_text), migration)
 
 
 class MalformedInputTests(unittest.TestCase):
