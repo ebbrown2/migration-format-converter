@@ -38,8 +38,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--to",
         dest="to_format",
         choices=FORMAT_CHOICES,
-        required=True,
-        help="target format",
+        default=None,
+        help="target format (required unless --check is given)",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="validate that the input parses without converting or writing anything",
     )
     parser.add_argument(
         "-o",
@@ -63,8 +68,17 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
+    if not args.check and args.to_format is None:
+        return _fail(args.json, "--to is required unless --check is given")
+
     if args.input.is_dir():
+        if args.check:
+            return _check_directory(args)
         return _run_directory(args)
+
+    if args.check:
+        return _check_file(args)
+
     if args.from_format == GOLANG_MIGRATE or args.to_format == GOLANG_MIGRATE:
         return _fail(
             args.json,
@@ -153,6 +167,87 @@ def _run_directory(args: argparse.Namespace) -> int:
                 print(f"error: {result['input']}: {result['error']}", file=sys.stderr)
 
     return 0 if ok_overall else 1
+
+
+def _check_file(args: argparse.Namespace) -> int:
+    try:
+        text = args.input.read_text()
+    except OSError as exc:
+        return _fail(args.json, f"could not read {args.input}: {exc}")
+
+    from_format = args.from_format or formats.detect_format(text)
+    if from_format is None:
+        return _fail(args.json, f"could not detect input format for {args.input}; pass --from")
+    if from_format == GOLANG_MIGRATE:
+        return _fail(
+            args.json,
+            "golang-migrate pairs .up.sql/.down.sql files; pass a directory as input",
+        )
+
+    parse_fn, _ = formats.FORMATS[from_format]
+    try:
+        migration = parse_fn(text)
+    except formats.FormatError as exc:
+        return _fail(args.json, str(exc))
+
+    up_count = formats.count_statements(migration.up)
+    down_count = formats.count_statements(migration.down)
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "input": str(args.input),
+                    "from_format": from_format,
+                    "up_statement_count": up_count,
+                    "down_statement_count": down_count,
+                }
+            )
+        )
+    else:
+        print(f"ok: {args.input} ({from_format}, {up_count} up / {down_count} down statements)")
+
+    return 0
+
+
+def _check_directory(args: argparse.Namespace) -> int:
+    if args.from_format == GOLANG_MIGRATE:
+        units, error = _collect_golang_migrate_pairs(args.input)
+    else:
+        units, error = _collect_single_file_units(args.input)
+    if error:
+        return _fail(args.json, error)
+
+    results = [_check_unit(unit, args.from_format) for unit in units]
+    ok_overall = all(result["ok"] for result in results)
+
+    if args.json:
+        print(json.dumps({"ok": ok_overall, "results": results}))
+    else:
+        for result in results:
+            if result["ok"]:
+                print(
+                    f"ok: {result['input']} ({result['from_format']}, "
+                    f"{result['up_statement_count']} up / {result['down_statement_count']} down statements)"
+                )
+            else:
+                print(f"error: {result['input']}: {result['error']}", file=sys.stderr)
+
+    return 0 if ok_overall else 1
+
+
+def _check_unit(unit: dict, from_format_override: str | None) -> dict:
+    migration, from_format, error = _load_migration(unit, from_format_override)
+    if error:
+        return {"ok": False, "input": _unit_input_desc(unit), "error": error}
+    return {
+        "ok": True,
+        "input": _unit_input_desc(unit),
+        "from_format": from_format,
+        "up_statement_count": formats.count_statements(migration.up),
+        "down_statement_count": formats.count_statements(migration.down),
+    }
 
 
 def _collect_single_file_units(input_dir: pathlib.Path) -> tuple[list[dict], str | None]:

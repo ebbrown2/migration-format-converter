@@ -103,6 +103,29 @@ In the JSON output, a result whose target is golang-migrate has
 instead; every other result keeps `"output_file"` and has
 `"output_files": null`.
 
+## Check mode
+
+Pass `--check` to validate that a file (or every file in a directory) parses
+without converting or writing anything. `--to` isn't needed in this mode
+since there's no target format; `-o/--output` is ignored if given.
+
+```
+$ python -m migconvert 0001_create_users.sql --check
+ok: 0001_create_users.sql (goose, 1 up / 1 down statements)
+```
+
+Directory mode reports one line per file (or `--json` result entry) and
+exits 1 if any file fails to parse, the same as conversion:
+
+```
+$ python -m migconvert db/goose_migrations --check
+ok: db/goose_migrations/0001_create_users.sql (goose, 1 up / 1 down statements)
+error: db/goose_migrations/0002_broken.sql: no '-- +goose Up' marker found
+```
+
+golang-migrate directories need `--from golang-migrate`, same as
+conversion, since it can't be auto-detected from a lone file's contents.
+
 ## JSON output
 
 Every command supports `--json` for scripting against, which reports the
@@ -135,8 +158,7 @@ string literals, and comments.
 Early skeleton. Handles the common case (one up block, one down block).
 The `--json` statement counts account for `$$`- and `$tag$`-quoted
 function bodies, so a semicolon inside a `CREATE FUNCTION` body doesn't
-get counted as a statement separator. There's no `--check` mode yet to
-validate a file without converting it.
+get counted as a statement separator.
 
 ## License
 
