@@ -203,6 +203,38 @@ class CheckModeTests(unittest.TestCase):
             self.assertTrue(results_by_input["0001_create_users.sql"]["ok"])
             self.assertFalse(results_by_input["0002_bad.sql"]["ok"])
 
+    def test_check_golang_migrate_single_file_pairs_with_sibling(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "src"
+            src.mkdir()
+            (src / "0001_create_users.up.sql").write_text("SELECT 1;\n")
+            (src / "0001_create_users.down.sql").write_text("SELECT 2;\n")
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main([str(src / "0001_create_users.up.sql"), "--check", "--json"])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["from_format"], "golang-migrate")
+            self.assertEqual(payload["up_statement_count"], 1)
+            self.assertEqual(payload["down_statement_count"], 1)
+
+    def test_check_golang_migrate_single_file_missing_sibling(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "src"
+            src.mkdir()
+            (src / "0001_create_users.up.sql").write_text("SELECT 1;\n")
+            # no matching down file
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                exit_code = main([str(src / "0001_create_users.up.sql"), "--check"])
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("down.sql", stderr.getvalue())
+
     def test_check_golang_migrate_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / "src"

@@ -8,8 +8,10 @@ from . import formats
 # golang-migrate splits a migration across two files (<name>.up.sql /
 # <name>.down.sql) instead of marking up/down sections inside one file, so
 # it can't share the single-text parse/render signature in formats.FORMATS.
-# It's only ever used in directory mode, where a "unit" is a pair of files
-# rather than one.
+# Conversion only runs in directory mode, where a "unit" is a pair of files
+# rather than one; --check also accepts a single .up.sql/.down.sql file and
+# pairs it with its sibling, since checking doesn't need to write a pair back
+# out.
 GOLANG_MIGRATE = "golang-migrate"
 FORMAT_CHOICES = sorted([*formats.FORMATS, GOLANG_MIGRATE])
 
@@ -170,6 +172,17 @@ def _run_directory(args: argparse.Namespace) -> int:
 
 
 def _check_file(args: argparse.Namespace) -> int:
+    if args.from_format == GOLANG_MIGRATE:
+        if not _is_golang_migrate_half(args.input):
+            return _fail(
+                args.json,
+                f"{args.input} is not a .up.sql/.down.sql file; golang-migrate needs "
+                "one of those, or a directory, as input",
+            )
+        return _check_golang_migrate_file(args)
+    if args.from_format is None and _is_golang_migrate_half(args.input):
+        return _check_golang_migrate_file(args)
+
     try:
         text = args.input.read_text()
     except OSError as exc:
@@ -178,11 +191,6 @@ def _check_file(args: argparse.Namespace) -> int:
     from_format = args.from_format or formats.detect_format(text)
     if from_format is None:
         return _fail(args.json, f"could not detect input format for {args.input}; pass --from")
-    if from_format == GOLANG_MIGRATE:
-        return _fail(
-            args.json,
-            "golang-migrate pairs .up.sql/.down.sql files; pass a directory as input",
-        )
 
     parse_fn, _ = formats.FORMATS[from_format]
     try:
@@ -209,6 +217,45 @@ def _check_file(args: argparse.Namespace) -> int:
         print(f"ok: {args.input} ({from_format}, {up_count} up / {down_count} down statements)")
 
     return 0
+
+
+def _is_golang_migrate_half(path: pathlib.Path) -> bool:
+    return path.name.endswith(".up.sql") or path.name.endswith(".down.sql")
+
+
+def _golang_migrate_peer_paths(
+    path: pathlib.Path,
+) -> tuple[str, pathlib.Path | None, pathlib.Path | None]:
+    """Given one half of a golang-migrate pair, find the other half beside it."""
+    if path.name.endswith(".up.sql"):
+        stem = path.name[: -len(".up.sql")]
+        up_path, down_path = path, path.with_name(f"{stem}.down.sql")
+    else:
+        stem = path.name[: -len(".down.sql")]
+        up_path, down_path = path.with_name(f"{stem}.up.sql"), path
+
+    return stem, (up_path if up_path.exists() else None), (down_path if down_path.exists() else None)
+
+
+def _check_golang_migrate_file(args: argparse.Namespace) -> int:
+    if not args.input.exists():
+        return _fail(args.json, f"could not read {args.input}: No such file or directory")
+
+    name, up_path, down_path = _golang_migrate_peer_paths(args.input)
+    unit = {"name": name, "up_path": up_path, "down_path": down_path}
+    result = _check_unit(unit, GOLANG_MIGRATE)
+
+    if args.json:
+        print(json.dumps(result))
+    elif result["ok"]:
+        print(
+            f"ok: {result['input']} ({result['from_format']}, "
+            f"{result['up_statement_count']} up / {result['down_statement_count']} down statements)"
+        )
+    else:
+        print(f"error: {result['input']}: {result['error']}", file=sys.stderr)
+
+    return 0 if result["ok"] else 1
 
 
 def _check_directory(args: argparse.Namespace) -> int:

@@ -126,6 +126,20 @@ error: db/goose_migrations/0002_broken.sql: no '-- +goose Up' marker found
 golang-migrate directories need `--from golang-migrate`, same as
 conversion, since it can't be auto-detected from a lone file's contents.
 
+`--check` also accepts a single `.up.sql` or `.down.sql` file directly
+(conversion doesn't, since writing a pair back out needs a directory to put
+both files in). The missing half is found beside it and both are checked
+together as one migration:
+
+```
+$ python -m migconvert db/migrations/0001_create_users.up.sql --check
+ok: db/migrations/0001_create_users.{up,down}.sql (golang-migrate, 1 up / 1 down statements)
+```
+
+If the sibling file doesn't exist, this is reported the same as a missing
+half in directory mode. `--from golang-migrate` is only required here if
+the file's name doesn't end in `.up.sql`/`.down.sql`.
+
 ## JSON output
 
 Every command supports `--json` for scripting against, which reports the
