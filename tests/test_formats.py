@@ -1,6 +1,7 @@
 import unittest
 
 from migconvert.formats import (
+    MAX_SANE_STATEMENT_COUNT,
     FormatError,
     Migration,
     count_statements,
@@ -11,6 +12,7 @@ from migconvert.formats import (
     render_dbmate,
     render_golang_migrate,
     render_goose,
+    statement_count_warnings,
 )
 
 
@@ -160,6 +162,40 @@ class CountStatementsTests(unittest.TestCase):
     def test_semicolon_inside_block_comment_is_not_a_separator(self):
         sql = "/* a ; in a block comment */\nSELECT 1;"
         self.assertEqual(count_statements(sql), 1)
+
+
+class StatementCountWarningsTests(unittest.TestCase):
+    def test_normal_migration_has_no_warnings(self):
+        migration = Migration(up="CREATE TABLE t (id INTEGER);", down="DROP TABLE t;")
+        self.assertEqual(statement_count_warnings(migration), [])
+
+    def test_empty_down_has_no_warning(self):
+        # A down block with no statements is common for irreversible
+        # migrations, so it isn't flagged the way an empty up block is.
+        migration = Migration(up="CREATE TABLE t (id INTEGER);", down="")
+        self.assertEqual(statement_count_warnings(migration), [])
+
+    def test_empty_up_is_warned(self):
+        migration = Migration(up="", down="DROP TABLE t;")
+        warnings = statement_count_warnings(migration)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("up block has no statements", warnings[0])
+
+    def test_up_over_sanity_bound_is_warned(self):
+        up = "SELECT 1;" * (MAX_SANE_STATEMENT_COUNT + 1)
+        migration = Migration(up=up, down="SELECT 1;")
+        warnings = statement_count_warnings(migration)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("up block", warnings[0])
+        self.assertIn("sanity bound", warnings[0])
+
+    def test_down_over_sanity_bound_is_warned(self):
+        down = "SELECT 1;" * (MAX_SANE_STATEMENT_COUNT + 1)
+        migration = Migration(up="SELECT 1;", down=down)
+        warnings = statement_count_warnings(migration)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("down block", warnings[0])
+        self.assertIn("sanity bound", warnings[0])
 
 
 if __name__ == "__main__":

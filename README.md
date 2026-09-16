@@ -140,6 +140,19 @@ If the sibling file doesn't exist, this is reported the same as a missing
 half in directory mode. `--from golang-migrate` is only required here if
 the file's name doesn't end in `.up.sql`/`.down.sql`.
 
+`--check` also flags statement counts that look like a missed marker rather
+than a genuine migration: an up block with no statements at all, or an up
+or down block with an implausibly large number of them (currently over
+200). These are warnings, not errors - they're printed to stderr and
+included as a `"warnings"` list in the JSON result, but they don't affect
+the exit code or make `"ok"` false.
+
+```
+$ python -m migconvert 0003_empty_up.sql --check
+ok: 0003_empty_up.sql (goose, 0 up / 1 down statements)
+warning: 0003_empty_up.sql: up block has no statements
+```
+
 ## JSON output
 
 Every command supports `--json` for scripting against, which reports the
@@ -173,6 +186,9 @@ Early skeleton. Handles the common case (one up block, one down block).
 The `--json` statement counts account for `$$`- and `$tag$`-quoted
 function bodies, so a semicolon inside a `CREATE FUNCTION` body doesn't
 get counted as a statement separator.
+
+`--check` warnings are advisory only for now; there's no flag yet to make
+a warning fail the command the way a parse error does.
 
 ## License
 

@@ -166,6 +166,36 @@ def count_statements(sql: str) -> int:
     return count
 
 
+# Not a hard limit on any of the three tools; just the point past which a
+# migration is far more likely to be a missed marker (everything landed in
+# one section) than a genuine hand-written batch of statements.
+MAX_SANE_STATEMENT_COUNT = 200
+
+
+def statement_count_warnings(migration: Migration) -> list[str]:
+    """Flag statement counts that look like a marker was missed, not a real error.
+
+    These don't affect whether a migration parses; they're surfaced by
+    --check as advisory warnings so a caller can decide whether to look
+    closer before applying the migration.
+    """
+    warnings = []
+    up_count = count_statements(migration.up)
+    down_count = count_statements(migration.down)
+
+    if up_count == 0:
+        warnings.append("up block has no statements")
+    if up_count > MAX_SANE_STATEMENT_COUNT:
+        warnings.append(
+            f"up block has {up_count} statements, over the sanity bound of {MAX_SANE_STATEMENT_COUNT}"
+        )
+    if down_count > MAX_SANE_STATEMENT_COUNT:
+        warnings.append(
+            f"down block has {down_count} statements, over the sanity bound of {MAX_SANE_STATEMENT_COUNT}"
+        )
+    return warnings
+
+
 def detect_format(text: str) -> str | None:
     if "-- +goose Up" in text:
         return "goose"

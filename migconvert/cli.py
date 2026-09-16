@@ -200,6 +200,7 @@ def _check_file(args: argparse.Namespace) -> int:
 
     up_count = formats.count_statements(migration.up)
     down_count = formats.count_statements(migration.down)
+    warnings = formats.statement_count_warnings(migration)
 
     if args.json:
         print(
@@ -210,11 +211,14 @@ def _check_file(args: argparse.Namespace) -> int:
                     "from_format": from_format,
                     "up_statement_count": up_count,
                     "down_statement_count": down_count,
+                    "warnings": warnings,
                 }
             )
         )
     else:
         print(f"ok: {args.input} ({from_format}, {up_count} up / {down_count} down statements)")
+        for warning in warnings:
+            print(f"warning: {args.input}: {warning}", file=sys.stderr)
 
     return 0
 
@@ -252,6 +256,8 @@ def _check_golang_migrate_file(args: argparse.Namespace) -> int:
             f"ok: {result['input']} ({result['from_format']}, "
             f"{result['up_statement_count']} up / {result['down_statement_count']} down statements)"
         )
+        for warning in result["warnings"]:
+            print(f"warning: {result['input']}: {warning}", file=sys.stderr)
     else:
         print(f"error: {result['input']}: {result['error']}", file=sys.stderr)
 
@@ -278,6 +284,8 @@ def _check_directory(args: argparse.Namespace) -> int:
                     f"ok: {result['input']} ({result['from_format']}, "
                     f"{result['up_statement_count']} up / {result['down_statement_count']} down statements)"
                 )
+                for warning in result["warnings"]:
+                    print(f"warning: {result['input']}: {warning}", file=sys.stderr)
             else:
                 print(f"error: {result['input']}: {result['error']}", file=sys.stderr)
 
@@ -294,6 +302,7 @@ def _check_unit(unit: dict, from_format_override: str | None) -> dict:
         "from_format": from_format,
         "up_statement_count": formats.count_statements(migration.up),
         "down_statement_count": formats.count_statements(migration.down),
+        "warnings": formats.statement_count_warnings(migration),
     }
 
 

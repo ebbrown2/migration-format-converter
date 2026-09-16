@@ -235,6 +235,50 @@ class CheckModeTests(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertIn("down.sql", stderr.getvalue())
 
+    def test_check_json_includes_empty_warnings_for_normal_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "0001_create_users.sql"
+            src.write_text("-- +goose Up\nSELECT 1;\n\n-- +goose Down\nSELECT 2;\n")
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main([str(src), "--check", "--json"])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["warnings"], [])
+
+    def test_check_warns_on_empty_up_block_without_failing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "0001_empty_up.sql"
+            src.write_text("-- +goose Up\n\n-- +goose Down\nSELECT 2;\n")
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                exit_code = main([str(src), "--check", "--json"])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["ok"])
+            self.assertIn("up block has no statements", payload["warnings"][0])
+            self.assertIn("up block has no statements", stderr.getvalue())
+
+    def test_check_directory_warnings_appear_per_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "src"
+            src.mkdir()
+            (src / "0001_empty_up.sql").write_text("-- +goose Up\n\n-- +goose Down\nSELECT 2;\n")
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main([str(src), "--check", "--json"])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["ok"])
+            self.assertIn("up block has no statements", payload["results"][0]["warnings"][0])
+
     def test_check_golang_migrate_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / "src"
