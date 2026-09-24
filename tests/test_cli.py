@@ -279,6 +279,82 @@ class CheckModeTests(unittest.TestCase):
             self.assertTrue(payload["ok"])
             self.assertIn("up block has no statements", payload["results"][0]["warnings"][0])
 
+    def test_check_strict_fails_on_warning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "0001_empty_up.sql"
+            src.write_text("-- +goose Up\n\n-- +goose Down\nSELECT 2;\n")
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main([str(src), "--check", "--strict", "--json"])
+
+            self.assertEqual(exit_code, 1)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["ok"])
+            self.assertIn("up block has no statements", payload["warnings"][0])
+
+    def test_check_strict_passes_without_warnings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "0001_create_users.sql"
+            src.write_text("-- +goose Up\nSELECT 1;\n\n-- +goose Down\nSELECT 2;\n")
+
+            exit_code = main([str(src), "--check", "--strict", "--json"])
+
+            self.assertEqual(exit_code, 0)
+
+    def test_check_strict_still_fails_on_parse_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "bad.sql"
+            src.write_text("SELECT 1;\n")
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                exit_code = main([str(src), "--check", "--strict"])
+
+            self.assertEqual(exit_code, 1)
+
+    def test_check_strict_directory_fails_if_any_file_warns(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "src"
+            src.mkdir()
+            (src / "0001_create_users.sql").write_text(
+                "-- +goose Up\nSELECT 1;\n\n-- +goose Down\nSELECT 2;\n"
+            )
+            (src / "0002_empty_up.sql").write_text("-- +goose Up\n\n-- +goose Down\nSELECT 2;\n")
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main([str(src), "--check", "--strict", "--json"])
+
+            self.assertEqual(exit_code, 1)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["ok"])
+
+    def test_check_strict_golang_migrate_single_file_fails_on_warning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "src"
+            src.mkdir()
+            (src / "0001_create_users.up.sql").write_text("")
+            (src / "0001_create_users.down.sql").write_text("SELECT 2;\n")
+
+            exit_code = main(
+                [str(src / "0001_create_users.up.sql"), "--check", "--strict", "--json"]
+            )
+
+            self.assertEqual(exit_code, 1)
+
+    def test_strict_without_check_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "0001_create_users.sql"
+            src.write_text("-- +goose Up\nSELECT 1;\n\n-- +goose Down\nSELECT 2;\n")
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                exit_code = main([str(src), "--to", "dbmate", "--strict"])
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("--strict", stderr.getvalue())
+
     def test_check_golang_migrate_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / "src"

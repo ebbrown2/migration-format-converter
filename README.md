@@ -153,6 +153,19 @@ ok: 0003_empty_up.sql (goose, 0 up / 1 down statements)
 warning: 0003_empty_up.sql: up block has no statements
 ```
 
+Pass `--strict` along with `--check` to make those warnings fail the command
+too: the exit code is 1 if any file has a warning, same as a parse error,
+even though each file's own `"ok"` stays `true` and the warning text is
+unchanged. `--strict` without `--check` is an error, since there's nothing
+for it to tighten.
+
+```
+$ python -m migconvert 0003_empty_up.sql --check --strict; echo $?
+ok: 0003_empty_up.sql (goose, 0 up / 1 down statements)
+warning: 0003_empty_up.sql: up block has no statements
+1
+```
+
 ## JSON output
 
 Every command supports `--json` for scripting against, which reports the
@@ -186,9 +199,6 @@ Early skeleton. Handles the common case (one up block, one down block).
 The `--json` statement counts account for `$$`- and `$tag$`-quoted
 function bodies, so a semicolon inside a `CREATE FUNCTION` body doesn't
 get counted as a statement separator.
-
-`--check` warnings are advisory only for now; there's no flag yet to make
-a warning fail the command the way a parse error does.
 
 ## License
 

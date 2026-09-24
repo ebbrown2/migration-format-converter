@@ -49,6 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="validate that the input parses without converting or writing anything",
     )
     parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="with --check, exit 1 if any statement-count warning is raised, not just on parse errors",
+    )
+    parser.add_argument(
         "-o",
         "--output",
         type=pathlib.Path,
@@ -72,6 +77,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.check and args.to_format is None:
         return _fail(args.json, "--to is required unless --check is given")
+
+    if args.strict and not args.check:
+        return _fail(args.json, "--strict only applies to --check")
 
     if args.input.is_dir():
         if args.check:
@@ -220,7 +228,7 @@ def _check_file(args: argparse.Namespace) -> int:
         for warning in warnings:
             print(f"warning: {args.input}: {warning}", file=sys.stderr)
 
-    return 0
+    return 1 if args.strict and warnings else 0
 
 
 def _is_golang_migrate_half(path: pathlib.Path) -> bool:
@@ -261,7 +269,9 @@ def _check_golang_migrate_file(args: argparse.Namespace) -> int:
     else:
         print(f"error: {result['input']}: {result['error']}", file=sys.stderr)
 
-    return 0 if result["ok"] else 1
+    if not result["ok"]:
+        return 1
+    return 1 if args.strict and result["warnings"] else 0
 
 
 def _check_directory(args: argparse.Namespace) -> int:
@@ -289,7 +299,11 @@ def _check_directory(args: argparse.Namespace) -> int:
             else:
                 print(f"error: {result['input']}: {result['error']}", file=sys.stderr)
 
-    return 0 if ok_overall else 1
+    if not ok_overall:
+        return 1
+    if args.strict and any(result["warnings"] for result in results):
+        return 1
+    return 0
 
 
 def _check_unit(unit: dict, from_format_override: str | None) -> dict:
