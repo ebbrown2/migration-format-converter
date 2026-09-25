@@ -166,6 +166,13 @@ warning: 0003_empty_up.sql: up block has no statements
 1
 ```
 
+Pass `--version` to print the installed version and exit:
+
+```
+$ python -m migconvert --version
+migconvert 0.1.0
+```
+
 ## JSON output
 
 Every command supports `--json` for scripting against, which reports the

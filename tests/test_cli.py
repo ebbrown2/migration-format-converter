@@ -5,7 +5,27 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from migconvert import __version__
 from migconvert.cli import main
+
+
+class VersionTests(unittest.TestCase):
+    def test_version_flag_prints_version_and_exits_zero(self):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            with self.assertRaises(SystemExit) as cm:
+                main(["--version"])
+
+        self.assertEqual(cm.exception.code, 0)
+        self.assertIn(__version__, stdout.getvalue())
+
+    def test_version_flag_does_not_require_input(self):
+        # --version has to short-circuit before argparse complains that the
+        # positional "input" argument is missing.
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            with self.assertRaises(SystemExit):
+                main(["--version"])
 
 
 class GolangMigrateDirectoryTests(unittest.TestCase):

@@ -3,7 +3,7 @@ import json
 import pathlib
 import sys
 
-from . import formats
+from . import __version__, formats
 
 # golang-migrate splits a migration across two files (<name>.up.sql /
 # <name>.down.sql) instead of marking up/down sections inside one file, so
@@ -20,6 +20,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="migconvert",
         description="Convert a SQL migration file between goose, dbmate, and golang-migrate formats.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
     parser.add_argument(
         "input",
